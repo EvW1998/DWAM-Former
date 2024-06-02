@@ -1,0 +1,91 @@
+{   
+    "num_classes": 2,
+
+    "evaluate": ["F1"], 
+    
+    "meta_csv_file": "~/DWAM-Former/metadata/metadata_daicwoz_crop_resample.csv",
+
+    "spec": {
+        "feature_dim": 161, 
+        "matdir": "/hy-tmp/DAIC_feature/wav_spec_20ms_mat",
+        "matkey": "spec", 
+        "length": 1076,
+        "pad_value": -80,
+        "frame": 0.02,
+        "hop": 0.01
+    },
+
+    "wav2vec": {
+        "feature_dim": 512, 
+        "matdir": "../DAIC_feature/wav_wav2vec_mat_complete",
+        "matkey": "wav", 
+        "length": 1074,
+        "pad_value": 0,
+        "frame": 0.03,
+        "hop": 0.01
+    },
+
+    "logmel": {
+        "feature_dim": 128, 
+        "matdir": "/hy-tmp/DAIC_feature/logmel_25ms_mat",
+        "matkey": "logmel", 
+        "length": 1074,
+        "pad_value": 0,
+        "frame": 0.025,
+        "hop": 0.01
+    },
+
+    "fbank": {
+        "feature_dim": 128,
+        "matdir": "/hy-tmp/DAIC_feature/fbank_mat",
+        "matkey": "fbank",
+        "length": 1074,
+        "pad_value": 0,
+        "frame": 0.025,
+        "hop": 0.01
+    },
+
+    "hubert12": {
+        "feature_dim": 1024, 
+        "lmdb_root": "/hy-tmp/DAIC_feature//daic_woz_hubert_L12_v6",
+        "matdir": "../DAIC_feature/hubert_large_L12_mat_complete",
+        "matkey": "hubert", 
+        "length": 426,
+        "pad_value": 0,
+        "frame": 0.025,
+        "hop": 0.02
+    },
+
+    "hubert24": {
+        "feature_dim": 1024, 
+        "lmdb_root": "/hy-tmp/DAIC_feature/daic_woz_hubert_L24_v6",
+        "matdir": "../DAIC_feature/hubert_large_L24_mat_complete",
+        "matkey": "hubert", 
+        "length": 426,
+        "pad_value": 0,
+        "frame": 0.025,
+        "hop": 0.02
+    },
+
+    "w2v12": {
+        "feature_dim": 1024, 
+        "lmdb_root": "/hy-tmp/DAIC_feature/daic_woz_w2v2_L12",
+        "matdir": "/hy-tmp/DAIC_feature/w2v2_large_L12_mat",
+        "matkey": "w2v2", 
+        "length": 426,
+        "pad_value": 0,
+        "frame": 0.025,
+        "hop": 0.02
+    },
+
+    "w2v24": {
+        "feature_dim": 1024, 
+        "lmdb_root": "/hy-tmp/DAIC_feature/daic_woz_w2v2_L24",
+        "matdir": "/hy-tmp/DAIC_feature/w2v2_large_L24_mat",
+        "matkey": "w2v2", 
+        "length": 426,
+        "pad_value": 0,
+        "frame": 0.025,
+        "hop": 0.02
+    }
+}

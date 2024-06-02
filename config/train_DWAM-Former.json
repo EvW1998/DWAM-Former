@@ -1,0 +1,44 @@
+{
+    "daic_woz": {
+        "spec": {
+            "train.EPOCH": 60,
+            "train.batch_size": 16,
+            "train.lr": 0.0005
+        },
+        "logmel": {
+            "train.EPOCH": 60,
+            "train.batch_size": 16,
+            "train.lr": 0.0005
+        },
+        "fbank": {
+            "train.EPOCH": 60,
+            "train.batch_size": 16,
+            "train.lr": 0.0005
+        },
+        "wav2vec": {
+            "train.EPOCH": 70,
+            "train.batch_size": 16,
+            "train.lr": 0.00075
+        },
+        "w2v12": {
+            "train.EPOCH": 70,
+            "train.batch_size": 16,
+            "train.lr": 0.00075
+        },
+        "w2v24": {
+            "train.EPOCH": 70,
+            "train.batch_size": 16,
+            "train.lr": 0.00075
+        },
+        "hubert12": {
+            "train.EPOCH": 70,
+            "train.batch_size": 16,
+            "train.lr": 0.00075
+        },
+        "hubert24": {
+            "train.EPOCH": 70,
+            "train.batch_size": 2,
+            "train.lr": 0.00075
+        }
+    }
+}
