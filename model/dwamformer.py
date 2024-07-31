@@ -75,12 +75,12 @@ class MergeBlock(nn.Module):
         """
         super().__init__()
 
-        out_channels = in_channels * expand  # 维度扩展 512
+        out_channels = in_channels * expand  # d expand to 512
         self.MS = int(merge_scale)  # 5
-        # self.pool = nn.AdaptiveAvgPool2d((1, in_channels))  # 2维平均池化层，窗口大小 (1, 512)
+        # self.pool = nn.AdaptiveAvgPool2d((1, in_channels))  # 2D average pooling layer with a window size of (1, 512)
         self.attn_pool = AttentionPool(in_channels * self.MS)
-        self.fc = nn.Linear(in_channels, out_channels)  # 全连接扩展维度
-        self.norm = nn.LayerNorm(out_channels)  # 层规范化
+        self.fc = nn.Linear(in_channels, out_channels)  # Linear to expand d
+        self.norm = nn.LayerNorm(out_channels)  # LayerNorm
 
     def forward(self, x: torch.Tensor):
         B, T, C = x.shape
@@ -93,7 +93,8 @@ class MergeBlock(nn.Module):
             T += pad
 
         """
-        确保输入特征的长度，能被ms整除，如无法被整除，则往输入特征后，填充0，以使特征能被ms整除
+        Ensure that the length of the input features is divisible by `ms`. If it is not divisible, 
+        pad the input features with zeros at the end to make their length divisible by `ms`.
         """
 
         x = x.view(B, T // ms, ms, C)  # (B, T, C) -> (B, T // ms, ms, C)
@@ -102,13 +103,13 @@ class MergeBlock(nn.Module):
         """
         self.pool(x) -> (B, T // ms, 1, C)
         squeeze(dim=-2) -> (B, T // ms, C)
-
-        将ms个特征，平均池化为1个特征
+        
+        pool `ms` features into a single feature.
         
         """
         x = self.norm(self.fc(x))
         """
-        self.fc(x) -> (B, T // ms, C * expand) 特征升维
+        self.fc(x) -> (B, T // ms, C * expand)
         """
 
         return x
@@ -116,10 +117,10 @@ class MergeBlock(nn.Module):
 
 class DWAMFormerBlock(nn.Module):
     def __init__(self,
-                 num_layers,  # 层数 2
-                 embed_dim,  # 输入特征维度 512
-                 ffn_embed_dim=2304,  # ffn 维度 256
-                 local_size=0,  # 窗口大小 Tw 5
+                 num_layers,  # 2
+                 embed_dim,  # 512
+                 ffn_embed_dim=2304,  # ffn 256
+                 local_size=0,  # Tw 5
                  num_heads=8,  # 8
                  dropout=0.1,
                  attention_dropout=0.1,
@@ -137,7 +138,7 @@ class DWAMFormerBlock(nn.Module):
         """
 
         super().__init__()
-        self.position = create_PositionalEncoding(embed_dim) if use_position else None  # 生成位置编码 (2000, 512)
+        self.position = create_PositionalEncoding(embed_dim) if use_position else None  # Generate positional encoding of shape (2000, 512)
         self.input_norm = nn.LayerNorm(embed_dim)
         self.local = int(local_size)
         self.layers = nn.ModuleList([DWAMFormerEncoder(embed_dim,  # 512
@@ -157,17 +158,19 @@ class DWAMFormerBlock(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
                 """
-                Xavier初始化是为了在训练开始时保持每层输入和输出的方差一致，以避免梯度在深度网络中消失或爆炸
+                Xavier initialization aims to maintain consistent variance between the inputs and outputs of each layer at the start of training, 
+                thereby preventing gradients from vanishing or exploding in deep networks.
 
-                这种初始化方法设置参数的值，使得每个参数的值都均匀分布在一个范围内，这个范围是基于参数张量维度计算出的。
-                它有助于保持激活函数的方差在前向传播和反向传播时保持不变。
+                This initialization method sets parameter values so that each parameter is uniformly distributed within a 
+                range calculated based on the dimensions of the parameter tensor. It helps keep the variance of the activation 
+                function unchanged during both forward and backward propagation.
                 """
 
     def forward(self, x, window):
-        output = self.input_norm(x)  # 对输入x进行LayerNorm
+        output = self.input_norm(x)  # LayerNorm
 
         for layer in self.layers:
-            output = layer(output, window, self.position)  # 将规则化后的输入，以及位置编码，输入到Encoder中
+            output = layer(output, window, self.position)  # Input the normalized inputs along with positional encoding into the Encoder.
 
         return output
 
@@ -178,18 +181,16 @@ class DWAMFormer(nn.Module):
     """
 
     def __init__(self,
-                 input_dim,  # 输入特征的维度（转换成能被num_heads，8，整除的维度）
-                 ffn_embed_dim,  # MSA中ffn的embedding维度（input_dim//2）
-                 num_layers,  # F-Stage, P-Stage, W-Stage和U-Stage中，Block的层数 [N1, N2, N3, N4]
-                 num_heads,  # MSA中的注意力头数
-                 hop,  # hop length
-                 num_classes,  # 分类数
-                 expand,  # Merging block中维度拓展 [1, 1, 1, -1] 或 [1, 1, 2, -1]
+                 input_dim,  # Adjust the input feature dimension to be divisible by `num_heads`, specifically 8.
+                 ffn_embed_dim,  # MSA ffn embedding（input_dim//2）
+                 num_layers,
+                 num_heads, 
+                 hop,  
+                 num_classes,  
+                 expand,
                  dropout=0.1, attention_dropout=0.1, device='cuda', _ms=None, **kwargs):
 
         """
-        模型初始化
-
         input_dim = (512 // 8) * 8 = 512
         ffn_embed_dim = 256
         num_layers = [2, 2, 4, 4]
@@ -209,7 +210,7 @@ class DWAMFormer(nn.Module):
             nn.Linear(50, 1)
         )
 
-        assert isinstance(num_layers, list)  # 确认num_layers为一个list
+        assert isinstance(num_layers, list)
 
         self.frame_encoder_block = DWAMFormerBlock(3,  # [2, 2, 4, 4]
                                                    self.input_dim,  # [512, 512, 512, 1024]
@@ -218,7 +219,7 @@ class DWAMFormer(nn.Module):
                                                    num_heads,  # 8
                                                    dropout,  # 0.1
                                                    attention_dropout,  # 0.1
-                                                   use_position=True)  # 定义了一个DWAMFormerBlock
+                                                   use_position=True)  # DWAMFormerBlock
 
         self.phoneme_encoder_block = DWAMFormerBlock(3,  # [2, 2, 4, 4]
                                                      self.input_dim,  # [512, 512, 512, 1024]
@@ -227,7 +228,7 @@ class DWAMFormer(nn.Module):
                                                      num_heads,  # 8
                                                      dropout,  # 0.1
                                                      attention_dropout,  # 0.1
-                                                     use_position=False)  # 定义了一个DWAMFormerBlock
+                                                     use_position=False)  # DWAMFormerBlock
 
         self.word_encoder_block = DWAMFormerBlock(6,  # [2, 2, 4, 4]
                                                   self.input_dim,  # [512, 512, 512, 1024]
@@ -236,7 +237,7 @@ class DWAMFormer(nn.Module):
                                                   num_heads,  # 8
                                                   dropout,  # 0.1
                                                   attention_dropout,  # 0.1
-                                                  use_position=False)  # 定义了一个DWAMFormerBlock
+                                                  use_position=False)  # DWAMFormerBlock
 
         self.frame_merge = MergeBlock(self.input_dim,
                                       5,  # [5, 5, 4, -1]
@@ -250,7 +251,7 @@ class DWAMFormer(nn.Module):
 
         self.layer_norm = nn.LayerNorm(self.input_dim)
 
-        self.avgpool = nn.AdaptiveAvgPool1d(1)  # 定义一个自适应平均池化层，将输入数据，池化为长度为1的数据
+        self.avgpool = nn.AdaptiveAvgPool1d(1)  # Define an adaptive average pooling layer that pools the input data to a length of 1.
 
         classifier_dim = self.input_dim  # classifier_dim = 512 * 2 = 1024
         self.classifier = nn.Sequential(
@@ -261,7 +262,7 @@ class DWAMFormer(nn.Module):
             nn.ReLU(True),
             nn.Dropout(0.5),
             nn.Linear(classifier_dim // 4, num_classes),  # 256 -> 2
-        )  # 定义了一个MLP分类器（二分类）
+        )  # Define an MLP classifier for binary classification.
 
     def window_size_divider(self, phonemes_info, masks):
         batch_phonemes_window_size = []
@@ -330,13 +331,13 @@ class DWAMFormer(nn.Module):
 
                 n, c = input_features.shape
 
-            # 计算每个池化区域的大小
+            # Calculate the size of each pooling region.
             region_size = n // i
-            # 计算池化后的长度
+            # Calculate the length after pooling.
             pooled_length = n // region_size
-            # 将特征张量重塑为 (pooled_length, region_size, c)
+            # Reshape the feature tensor to (pooled_length, region_size, c)
             reshaped_features = input_features[:pooled_length * region_size].view(pooled_length, region_size, c)
-            # 沿着第二个维度求平均值
+            # Compute the average along the second dimension.
             pooled_features = reshaped_features.mean(dim=1)
             return pooled_features
 
@@ -347,7 +348,7 @@ class DWAMFormer(nn.Module):
         batch_phonemes_window_size, batch_word_window_size = self.window_size_divider(phonemes_info, masks)
 
         if self.input_dim != x.shape[-1]:
-            x = x[:, :, :self.input_dim]  # x (batch, ？？, 特征维度)
+            x = x[:, :, :self.input_dim]
 
         new_x = self.frame_encoder_block(x, window=batch_phonemes_window_size)
         new_x = self.frame_merge(new_x)
@@ -361,12 +362,12 @@ class DWAMFormer(nn.Module):
         new_x = self.custom_avg_pooling(x, new_x.shape[1]) + new_x
         new_x = self.layer_norm(new_x)
 
-        new_x = self.word_encoder_block(new_x, window=batch_word_window_size).squeeze(dim=1)  # 将x去掉第2个维度
+        new_x = self.word_encoder_block(new_x, window=batch_word_window_size).squeeze(dim=1)  # Remove the second dimension from x
 
         del batch_phonemes_window_size
         del batch_word_window_size
 
-        new_x = self.avgpool(new_x.transpose(-1, -2)).squeeze(dim=-1)  # 将x的最后两个维度做转置，avgpool后，去掉最后一个维度
-        pred = self.classifier(new_x)  # 将x输入分类器中，得到预测结果
+        new_x = self.avgpool(new_x.transpose(-1, -2)).squeeze(dim=-1)  # Transpose the last two dimensions of, then apply average pooling, and remove the final dimension.
+        pred = self.classifier(new_x)  # Input x into the classifier to obtain the prediction results.
 
         return pred

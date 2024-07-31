@@ -34,7 +34,7 @@ class Speech_MSA(nn.Module):
         self.qdim = embed_dim  # 512
         self.kdim = embed_dim
         self.vdim = embed_dim
-        self.local_size = int(local_size)  # 窗口大小 5
+        self.local_size = int(local_size)  # Window size 5
         self.overlap = overlap  # overlap = True may have nondeterministic behavior.
 
         self.project_qkv = nn.Linear(embed_dim, 3 * embed_dim, bias=bias)  # 512 -> 1536
@@ -48,15 +48,20 @@ class Speech_MSA(nn.Module):
         self.dropout = dropout
         self.scaling = float(self.head_dim) ** -0.5  # 缩放因子 0.125
         """
-        在Transformer架构的自注意力机制中，查询（Q）、键（K）和值（V）是输入序列的不同表示，
-        自注意力通过计算查询和所有键之间的点积来确定每个位置应该给予序列中其他位置多少注意力。
-        点积可能会产生很大的数值，特别是当输入序列较长或特征维度较高时。
-        这样的大数值在经过softmax函数时可能会导致梯度非常小，这会使训练过程变得困难，因为这可能会导致梯度消失问题。
+        In the self-attention mechanism of the Transformer architecture, queries (Q), keys (K), and values (V) 
+        are different representations of the input sequence. Self-attention determines how much attention each position 
+        should give to other positions in the sequence by calculating the dot product between the query and all keys. 
+        The dot product can yield very large values, especially when the input sequence is long or the feature dimension is high. 
+        These large values can result in very small gradients when passed through the softmax function, 
+        making the training process difficult due to the potential for gradient vanishing.
 
-        为了缓解这个问题，点积结果通常会除以一个缩放因子，这个缩放因子是维度的平方根的倒数（即 float(self.head_dim) ** -0.5)
-        其中 self.head_dim 是键的维度大小。这种缩放有助于控制点积之后的数值范围，使得梯度在经过softmax函数时保持较为稳定。
+        To alleviate this issue, the dot product result is typically divided by a scaling factor, 
+        which is the inverse of the square root of the dimension (i.e., float(self.head_dim) ** -0.5), 
+        where self.head_dim is the dimensionality of the keys. This scaling helps control the range of values after the dot product, 
+        ensuring that the gradients remain relatively stable when passed through the softmax function.
 
-        所以，self.scaling 的作用就是在自注意力计算中作为一个常数因子，用来缩放点积的结果，以便有助于稳定训练过程。
+        Therefore, the purpose of self.scaling in self-attention computation is to act as a constant factor to scale the dot product results, 
+        thereby stabilizing the training process.
         """
 
     def get_overlap_segments(self, x: torch.Tensor, window_size: int):
@@ -66,7 +71,7 @@ class Speech_MSA(nn.Module):
             x: Input sequence in shape (B, T, C). 
             window_size: The needed length of the segment. Must be an odd number. 5
 
-        本函数，将全局特征，按照窗口大小，拆分成窗口特征
+        This function splits the global features into window features according to the window size.
         '''
         # assert window_size % 2, f'window_size must be an odd number, but get {window_size}.'
         if not window_size % 2:
@@ -98,12 +103,12 @@ class Speech_MSA(nn.Module):
               3-D key_padding_mask with math:`(B, T, S)` is supported now, where T is the target sequence length.
             - attn_mask: :math:`(T, S)` where T is the target sequence length, S is the source sequence length.
         '''
-        bsz, tgt_len = x.shape[:2]  # bsz -> batch size; tgt_len -> 特征长度
+        bsz, tgt_len = x.shape[:2]  # bsz -> batch size; tgt_len -> feature length
 
-        if self.local_size == -1:  # 如果到最后的Stage
-            local_size = tgt_len  # 窗口长度为特征长度
+        if self.local_size == -1:  # if in the last Stage
+            local_size = tgt_len  # The window length is equal to the feature length
             global_attn = True
-        else:  # 如果为前2个Stage
+        else:  # if in first 2 Stage
             local_size = self.local_size
             # largest_window_size = self.local_size
             # for ws in window:
@@ -117,7 +122,6 @@ class Speech_MSA(nn.Module):
             global_attn = False
 
         if not self.overlap:
-            # 不会允许
             need_pad = tgt_len % local_size
             if need_pad:
                 pad = local_size - need_pad
@@ -126,27 +130,25 @@ class Speech_MSA(nn.Module):
         else:
             need_pad = 0
 
-        Q, K, V = self.project_qkv(x).chunk(3, dim=-1)  # 对输入x，映射为不同的QKV
-        Q = Q * self.scaling  # 乘以缩放因子 0.125
+        Q, K, V = self.project_qkv(x).chunk(3, dim=-1) 
+        Q = Q * self.scaling  
         Q = Q.transpose(0, 1).contiguous().view(tgt_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
         """
         Q -> (B, T, C)
         transpose(0, 1) -> (T, B, C)
 
-        contiguous(): transpose 操作会导致张量的内存布局变得不连续，
-        因此 contiguous 调用用于确保张量在内存中是连续的，这是后续 view 操作的前提。
+        The `contiguous()` function is called because the `transpose` operation can make the tensor's memory layout non-contiguous. 
+        Therefore, `contiguous()` ensures that the tensor is stored in a contiguous block of memory, 
+        which is a prerequisite for subsequent `view` operations.
 
         view(tgt_len, bsz * self.num_heads, self.head_dim) -> (T, B * 8, C // 8)
 
         transpose(0, 1) -> (B * 8, T, C // 8)
-
-        把Q中的Batch，拆分成8组
-        K与V一样的操作
         """
         K = K.transpose(0, 1).contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
         V = V.transpose(0, 1).contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
 
-        if (self.overlap) and (not global_attn):  # 前2个Stage
+        if (self.overlap) and (not global_attn):
             Q = Q.unsqueeze(dim=2)  # (B * 8, T, C // 8) -> (B * 8, T, 1, C // 8)
             K = self.get_overlap_segments(K, window_size=local_size).transpose(-1, -2)
             """
@@ -156,10 +158,11 @@ class Speech_MSA(nn.Module):
             """
             V = self.get_overlap_segments(V, window_size=local_size)  # (B * 8, T, window_size, C // 8)
 
-            attn_output_weights = torch.matmul(Q, K)  # 点乘QK，获得注意力得分 (B * 8, T, 1, window_size)
+            attn_output_weights = torch.matmul(Q, K)  # Attention weight (B * 8, T, 1, window_size)
 
             attn_output_weights = F.softmax(attn_output_weights, dim=-1)
-            # 每个查询对应的窗口内的键的注意力得分会被归一化，获得注意力概率 (B * 8, T, 1, window_size)
+            # The attention scores of the keys within the window corresponding to each query will be normalized to obtain the attention probabilities.
+            # (B * 8, T, 1, window_size)
 
             attn_output_weights = F.dropout(attn_output_weights, p=self.dropout, training=self.training)
 
@@ -168,7 +171,7 @@ class Speech_MSA(nn.Module):
             torch.matmul(attn_output_weights, V) -> (B * 8, T, 1, C // 8)
             squeeze(dim=2) -> (B * 8, T, C // 8)
             """
-        else:  # W-Stage 全局注意力
+        else:  # W-Stage Global attention
             Q = Q.contiguous().view(-1, local_size, self.head_dim)  # local_size = tgt_len
             """
             Q -> (B * 8, T, C // 8)
@@ -177,14 +180,13 @@ class Speech_MSA(nn.Module):
             K = K.contiguous().view(-1, local_size, self.head_dim)
             V = V.contiguous().view(-1, local_size, self.head_dim)
 
-            src_len = K.size(1)  # 记录特征长度
-            attn_output_weights = torch.bmm(Q, K.transpose(1, 2))  # 点乘QK，获得注意力得分 (B * 8, T, T)
+            src_len = K.size(1) 
+            attn_output_weights = torch.bmm(Q, K.transpose(1, 2))
 
             assert list(attn_output_weights.size()) == [bsz * self.num_heads * tgt_len / local_size, local_size,
                                                         src_len]
 
             attn_output_weights = F.softmax(attn_output_weights, dim=-1)
-            # 每个查询对应的键的注意力得分会被归一化，获得注意力概率 (B * 8, T, T)
 
             attn_output_weights = F.dropout(attn_output_weights, p=self.dropout, training=self.training)
 
@@ -200,10 +202,10 @@ class Speech_MSA(nn.Module):
         view(tgt_len, bsz, self.embed_dim) -> view(T, B, C) -> (T, B, C)
         transpose(0, 1) -> (B, T, C)
 
-        将多头注意力机制的输出调整为后续层次所需的形状
+        Adjust the output of the multi-head attention mechanism to the shape required by the subsequent layers.
         """
 
-        attn_output = self.project_out(attn_output)  # 全连接转换
+        attn_output = self.project_out(attn_output)
 
         if need_pad:
             attn_output = attn_output[:, :-pad, :]
@@ -213,9 +215,9 @@ class Speech_MSA(nn.Module):
 
 class DWAMFormerEncoder(nn.Module):
     def __init__(self,
-                 embed_dim,  # 输入特征的维度 512
-                 ffn_embed_dim=2304,  # ffn维度 256
-                 local_size=0,  # 窗口大小 5
+                 embed_dim,  # 512
+                 ffn_embed_dim=2304,  # 256
+                 local_size=0,  # 5
                  num_heads=8,  # 8
                  dropout=0.1,
                  attention_dropout=0.1,
@@ -233,7 +235,7 @@ class DWAMFormerEncoder(nn.Module):
         """
 
         super().__init__()
-        self.dropout = dropout  # 定义dropout率  0.1
+        self.dropout = dropout  #  0.1
         self.activation_fn = _get_activation_fn(activation)  # F.relu
 
         self.attention = Speech_MSA(embed_dim,  # 512
@@ -273,19 +275,19 @@ class DWAMFormerEncoder(nn.Module):
         x: B, T, C
         """
         residual = x
-        x = self.add_position(x, x_position)  # 在输入x上，加入位置编码
+        x = self.add_position(x, x_position)  # Add positional encoding to the input x.
 
-        x = self.attention(x, window)  # 将x输入到MSA中
-        x = F.dropout(x, p=self.dropout, training=self.training)  # dropout层（只在训练阶段启用）
-        x = residual + x  # 残差
-        x = self.attention_layer_norm(x)  # LayerNom 层规则化
+        x = self.attention(x, window)  # Input x into the Multi-Head Self-Attention (MSA) mechanism.
+        x = F.dropout(x, p=self.dropout, training=self.training)  # Dropout layer (enabled only during the training phase)
+        x = residual + x  # residual
+        x = self.attention_layer_norm(x)  # LayerNom
 
         residual = x
 
-        x = self.activation_fn(self.fc1(x))  # 全连接，后过激活 512 -> 256
-        x = F.dropout(x, p=self.dropout, training=self.training)  # dropout层（只在训练阶段启用）
-        x = self.fc2(x)  # 全连接 256 -> 512
-        x = F.dropout(x, p=self.dropout, training=self.training)  # dropout层（只在训练阶段启用）
-        x = residual + x  # 残差
-        x = self.final_layer_norm(x)  # LayerNom 层规则化
+        x = self.activation_fn(self.fc1(x))  # Full connection 512 -> 256
+        x = F.dropout(x, p=self.dropout, training=self.training)  # Dropout layer (enabled only during the training phase)
+        x = self.fc2(x)  # Full connection 256 -> 512
+        x = F.dropout(x, p=self.dropout, training=self.training)  # dDropout layer (enabled only during the training phase)
+        x = residual + x  # residual
+        x = self.final_layer_norm(x)  # LayerNom
         return x

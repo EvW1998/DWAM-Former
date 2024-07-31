@@ -11,7 +11,7 @@ import os
 def extract_fbank(inputfile: str, savefile: str):
     fs, wavdata = wavfile.read(inputfile)  # read a wav file into numpy array
 
-    # 预加重
+    # Load weight
     frame_len = 25  # each frame length (ms)
     frame_shift = 10  # frame shift length (ms)
     frame_len_samples = frame_len * fs // 1000  # each frame length (samples)
@@ -26,8 +26,8 @@ def extract_fbank(inputfile: str, savefile: str):
     pre_emphasis_coeff = 0.97  # Pre-emphasis coefficient
     pad_data = np.append(pad_data[0], pad_data[1:] - pre_emphasis_coeff * pad_data[:-1])  # Pre-emphasis
 
-    # 分帧和加窗
-    window_func = np.hamming(frame_len_samples)  # hamming window
+    # hamming window
+    window_func = np.hamming(frame_len_samples)
 
     for i in range(total_frames):
         single_frame = pad_data[
@@ -35,14 +35,14 @@ def extract_fbank(inputfile: str, savefile: str):
         single_frame = single_frame * window_func  # add window function
         frame_data[i, :] = single_frame
 
-    # FFT（傅里叶变换）
+    # FFT
     K = 512  # length of DFT
     freq_domain_data = np.fft.rfft(frame_data, K)  # DFT
 
-    # 计算能量谱
+    # calcualte power spectrum
     power_spec = np.absolute(freq_domain_data) ** 2 * (1 / K)  # power spectrum
 
-    # Mel（梅尔）滤波
+    # Mel
     low_frequency = 20  # We don't use start from 0 Hz because human ear is not able to perceive low frequency signal.
     high_frequency = fs // 2  # if the speech is sampled at f Hz then our upper frequency is limited to 2/f Hz.
     low_frequency_mel = 2595 * np.log10(1 + low_frequency / 700)
@@ -66,9 +66,9 @@ def extract_fbank(inputfile: str, savefile: str):
     filter_bank = np.where(filter_bank == 0, np.finfo(float).eps,
                            filter_bank)  # Repalce 0 to a small constant or it will cause problem to log.
 
-    # 取log
+    # taking log
     log_fbank = np.log(filter_bank)
-    # 完成了Fbank的计算。
+    # calcualtion is done with FBank
     print(savefile, log_fbank.shape)
 
     dict = {'fbank': log_fbank}
